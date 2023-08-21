@@ -52,6 +52,8 @@ def _should_use_custom_op(input):
         return False
     if any(torch.__version__.startswith(x) for x in ['1.7.', '1.8.', '1.9']):
         return True
+    if torch.__version__.startswith('2'):
+        return True
     warnings.warn(f'conv2d_gradfix not supported on PyTorch {torch.__version__}. Falling back to torch.nn.functional.conv2d().')
     return False
 
@@ -140,9 +142,15 @@ def _conv2d_gradfix(transpose, weight_shape, stride, padding, output_padding, di
     class Conv2dGradWeight(torch.autograd.Function):
         @staticmethod
         def forward(ctx, grad_output, input):
-            op = torch._C._jit_get_operation('aten::cudnn_convolution_backward_weight' if not transpose else 'aten::cudnn_convolution_transpose_backward_weight')
             flags = [torch.backends.cudnn.benchmark, torch.backends.cudnn.deterministic, torch.backends.cudnn.allow_tf32]
-            grad_weight = op(weight_shape, grad_output, input, padding, stride, dilation, groups, *flags)
+            if torch.__version__.startswith('1'):
+                op = torch._C._jit_get_operation('aten::cudnn_convolution_backward_weight' if not transpose else 'aten::cudnn_convolution_transpose_backward_weight')
+                grad_weight = op(weight_shape, grad_output, input, padding, stride, dilation, groups, *flags)
+            elif torch.__version__.startswith('2'):
+                # https://github.com/pytorch/pytorch/issues/74437
+                op, _ = torch._C._jit_get_operation('aten::convolution_backward')
+                dummy_weight = torch.tensor(0.0, dtype=input.dtype, device=input.device).expand(weight_shape)
+                grad_weight = op(grad_output, input, dummy_weight, None, stride, padding, dilation, transpose, (0,0), groups, [False,True,False])[1]
             assert grad_weight.shape == weight_shape
             ctx.save_for_backward(grad_output, input)
             return grad_weight

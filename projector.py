@@ -35,7 +35,8 @@ def project(
     noise_ramp_length          = 0.75,
     regularize_noise_weight    = 1e5,
     verbose                    = False,
-    device: torch.device
+    force_fp32                 = False,
+    device: torch.device,
 ):
     assert target.shape == (G.img_channels, G.img_resolution, G.img_resolution)
 
@@ -90,7 +91,7 @@ def project(
         # Synth images from opt_w.
         w_noise = torch.randn_like(w_opt) * w_noise_scale
         ws = (w_opt + w_noise).repeat([1, G.mapping.num_ws, 1])
-        synth_images = G.synthesis(ws, noise_mode='const')
+        synth_images = G.synthesis(ws, noise_mode='const', force_fp32=force_fp32)
 
         # Downsample image to 256x256 if it's larger than that. VGG was built for 224x224 images.
         synth_images = (synth_images + 1) * (255/2)
@@ -117,7 +118,8 @@ def project(
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
-        logprint(f'step {step+1:>4d}/{num_steps}: dist {dist:<4.2f} loss {float(loss):<5.2f}')
+        if step % 100 == 0:
+            logprint(f'step {step+1:>4d}/{num_steps}: dist {dist:<4.2f} loss {float(loss):<5.2f}')
 
         # Save projected W for each optimization step.
         w_out[step] = w_opt.detach()[0]
@@ -160,7 +162,9 @@ def run_projection(
 
     # Load networks.
     print('Loading networks from "%s"...' % network_pkl)
-    device = torch.device('cuda')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    force_fp32 = not torch.cuda.is_available()
+
     with dnnlib.util.open_url(network_pkl) as fp:
         G = legacy.load_network_pkl(fp)['G_ema'].requires_grad_(False).to(device) # type: ignore
 
@@ -179,7 +183,8 @@ def run_projection(
         target=torch.tensor(target_uint8.transpose([2, 0, 1]), device=device), # pylint: disable=not-callable
         num_steps=num_steps,
         device=device,
-        verbose=True
+        verbose=True,
+        force_fp32=force_fp32,
     )
     print (f'Elapsed: {(perf_counter()-start_time):.1f} s')
 
@@ -189,7 +194,7 @@ def run_projection(
         video = imageio.get_writer(f'{outdir}/proj.mp4', mode='I', fps=10, codec='libx264', bitrate='16M')
         print (f'Saving optimization progress video "{outdir}/proj.mp4"')
         for projected_w in projected_w_steps:
-            synth_image = G.synthesis(projected_w.unsqueeze(0), noise_mode='const')
+            synth_image = G.synthesis(projected_w.unsqueeze(0), noise_mode='const', force_fp32=force_fp32)
             synth_image = (synth_image + 1) * (255/2)
             synth_image = synth_image.permute(0, 2, 3, 1).clamp(0, 255).to(torch.uint8)[0].cpu().numpy()
             video.append_data(np.concatenate([target_uint8, synth_image], axis=1))
@@ -198,7 +203,7 @@ def run_projection(
     # Save final projected frame and W vector.
     target_pil.save(f'{outdir}/target.png')
     projected_w = projected_w_steps[-1]
-    synth_image = G.synthesis(projected_w.unsqueeze(0), noise_mode='const')
+    synth_image = G.synthesis(projected_w.unsqueeze(0), noise_mode='const', force_fp32=force_fp32)
     synth_image = (synth_image + 1) * (255/2)
     synth_image = synth_image.permute(0, 2, 3, 1).clamp(0, 255).to(torch.uint8)[0].cpu().numpy()
     PIL.Image.fromarray(synth_image, 'RGB').save(f'{outdir}/proj.png')

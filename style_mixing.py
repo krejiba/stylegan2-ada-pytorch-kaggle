@@ -60,7 +60,9 @@ def generate_style_mix(
         --network=https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metfaces.pkl
     """
     print('Loading networks from "%s"...' % network_pkl)
-    device = torch.device('cuda')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    force_fp32 = not torch.cuda.is_available()
+
     with dnnlib.util.open_url(network_pkl) as f:
         G = legacy.load_network_pkl(f)['G_ema'].to(device) # type: ignore
 
@@ -75,7 +77,7 @@ def generate_style_mix(
     w_dict = {seed: w for seed, w in zip(all_seeds, list(all_w))}
 
     print('Generating images...')
-    all_images = G.synthesis(all_w, noise_mode=noise_mode)
+    all_images = G.synthesis(all_w, noise_mode=noise_mode, force_fp32=force_fp32)
     all_images = (all_images.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8).cpu().numpy()
     image_dict = {(seed, seed): image for seed, image in zip(all_seeds, list(all_images))}
 
@@ -84,7 +86,7 @@ def generate_style_mix(
         for col_seed in col_seeds:
             w = w_dict[row_seed].clone()
             w[col_styles] = w_dict[col_seed][col_styles]
-            image = G.synthesis(w[np.newaxis], noise_mode=noise_mode)
+            image = G.synthesis(w[np.newaxis], noise_mode=noise_mode, force_fp32=force_fp32)
             image = (image.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
             image_dict[(row_seed, col_seed)] = image[0].cpu().numpy()
 

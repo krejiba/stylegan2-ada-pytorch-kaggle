@@ -79,7 +79,9 @@ def generate_images(
     """
 
     print('Loading networks from "%s"...' % network_pkl)
-    device = torch.device('cuda')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    force_fp32 = not torch.cuda.is_available()
+
     with dnnlib.util.open_url(network_pkl) as f:
         G = legacy.load_network_pkl(f)['G_ema'].to(device) # type: ignore
 
@@ -94,7 +96,7 @@ def generate_images(
         ws = torch.tensor(ws, device=device) # pylint: disable=not-callable
         assert ws.shape[1:] == (G.num_ws, G.w_dim)
         for idx, w in enumerate(ws):
-            img = G.synthesis(w.unsqueeze(0), noise_mode=noise_mode)
+            img = G.synthesis(w.unsqueeze(0), noise_mode=noise_mode, force_fp32=force_fp32)
             img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
             if img[0].shape[-1] == 3:
                 img = PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/proj{idx:02d}.png')
@@ -120,7 +122,7 @@ def generate_images(
     for seed_idx, seed in enumerate(seeds):
         print('Generating image for seed %d (%d/%d) ...' % (seed, seed_idx, len(seeds)))
         z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device)
-        img = G(z, label, truncation_psi=truncation_psi, noise_mode=noise_mode)
+        img = G(z, label, truncation_psi=truncation_psi, noise_mode=noise_mode, force_fp32=force_fp32)
         img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
         if img[0].shape[-1] == 3:
             PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/seed{seed:04d}.png')

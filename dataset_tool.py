@@ -50,6 +50,10 @@ def is_image_ext(fname: Union[str, Path]) -> bool:
 #----------------------------------------------------------------------------
 
 def open_image_folder(source_dir, *, max_images: Optional[int]):
+
+    # Check if the source directory contains subdirectories
+    multiclass = any(item.is_dir() for item in Path(source_dir).iterdir())
+    
     input_images = [str(f) for f in sorted(Path(source_dir).rglob('*')) if is_image_ext(f) and os.path.isfile(f)]
 
     # Load labels.
@@ -62,6 +66,14 @@ def open_image_folder(source_dir, *, max_images: Optional[int]):
                 labels = { x[0]: x[1] for x in labels }
             else:
                 labels = {}
+    elif multiclass:
+        data_dir = Path(source_dir)
+        class_names = sorted([item.name for item in data_dir.iterdir() if item.is_dir()])
+        for i, lbl in enumerate(class_names):
+            print(f"class: {lbl} -> label: {i}")
+            for f in (data_dir / lbl).glob("*"):
+                if is_image_ext(f):
+                    labels[str(f.relative_to(data_dir))] = i
 
     max_idx = maybe_min(len(input_images), max_images)
 

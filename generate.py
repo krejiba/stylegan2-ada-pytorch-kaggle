@@ -112,8 +112,9 @@ def generate_images(
     label = torch.zeros([1, G.c_dim], device=device)
     if G.c_dim != 0:
         if class_idx is None:
-            ctx.fail('Must specify class label with --class when using a conditional network')
-        label[:, class_idx] = 1
+            print ('warn: generate all class labels when using a conditional network and --class not specified')
+        else:
+            label[:, class_idx] = 1
     else:
         if class_idx is not None:
             print ('warn: --class=lbl ignored when running on an unconditional network')
@@ -122,6 +123,9 @@ def generate_images(
     for seed_idx, seed in enumerate(seeds):
         print('Generating image for seed %d (%d/%d) ...' % (seed, seed_idx, len(seeds)))
         z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device)
+        if class_idx is None:
+            label = torch.zeros([1, G.c_dim], device=device)
+            label[:, seed_idx % G.c_dim] = 1
         img = G(z, label, truncation_psi=truncation_psi, noise_mode=noise_mode, force_fp32=force_fp32)
         img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
         if img[0].shape[-1] == 3:

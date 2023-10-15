@@ -123,7 +123,7 @@ def generate_images(
     for seed_idx, seed in enumerate(seeds):
         print('Generating image for seed %d (%d/%d) ...' % (seed, seed_idx, len(seeds)))
         z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device)
-        if class_idx is None:
+        if class_idx is None and G.c_dim:
             label = torch.zeros([1, G.c_dim], device=device)
             label[:, seed_idx % G.c_dim] = 1
         img = G(z, label, truncation_psi=truncation_psi, noise_mode=noise_mode, force_fp32=force_fp32)

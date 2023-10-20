@@ -411,8 +411,8 @@ def generate_labeled_images(seeds: list, augmented_generator, interpreter,
         img_pil = convert_tensor_to_pil(img, torgb=False)
         
         # Save synthetic image and corresponding predictions
-        img_pil.save(f'{save_dir}/seed{seed:04d}.png')
-        np.save(f'{save_dir}/seed{seed:04d}.npy', preds.cpu().numpy())
+        img_pil.save(f'{save_dir}/{seed:07d}.png')
+        np.save(f'{save_dir}/{seed:07d}.npy', preds.cpu().numpy())
 
         # Save composite for visual inspection
         _, composite = make_composite(img, preds, palette)
@@ -421,7 +421,7 @@ def generate_labeled_images(seeds: list, augmented_generator, interpreter,
             composite.save(sv_path)
         elif seed % 100 == 0:
             if verbose: print('(%d/%d) ...' % (seed, num_samples))
-            sv_path = result_dir / 'unseen' / f'seed{seed:04d}-pred.png'
+            sv_path = result_dir / 'unseen' / f'{seed:07d}-pred.png'
             composite.save(sv_path)
 
 
